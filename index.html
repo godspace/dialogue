@@ -60,27 +60,44 @@
 
     /* Вкладка: Чат */
     #chat-history {
-      display: flex; flex-direction: column; gap: 12px; margin-bottom: 60px;
+      display: flex; flex-direction: column; gap: 12px; margin-bottom: 120px;
     }
     .msg { padding: 12px 16px; border-radius: 18px; font-size: 0.95em; max-width: 85%; line-height: 1.4; }
     .msg-user { background: var(--primary); color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
     .msg-ai { background: var(--card-bg); border: 1px solid var(--border); align-self: flex-start; border-bottom-left-radius: 4px; }
     .msg-sys { text-align: center; font-size: 0.85em; color: var(--text-muted); align-self: center; background: none; border: none; }
 
+    /* Ввод сообщения с микрофоном */
     .chat-input-wrapper {
-      position: absolute; bottom: 70px; left: 0; right: 0;
-      padding: 10px 16px; background: var(--bg-color);
-      display: flex; gap: 8px; align-items: flex-end;
+      position: fixed; 
+      bottom: calc(85px + env(safe-area-inset-bottom)); /* Идеальный отступ от навигации */
+      left: 0; right: 0;
+      padding: 12px 16px; 
+      background: var(--bg-color);
+      display: flex; gap: 8px; align-items: flex-end; z-index: 40;
+      border-top: 1px solid var(--border);
     }
     #user-input {
       flex-grow: 1; padding: 12px 16px; border: 1px solid var(--border);
       border-radius: 20px; font-family: inherit; resize: none; font-size: 1em;
-      max-height: 100px; outline: none; background: var(--card-bg);
+      max-height: 120px; /* Увеличили максимальную высоту */
+      outline: none; background: var(--card-bg);
     }
+    
+    #mic-btn {
+      background: none; border: none; font-size: 1.6em; color: var(--text-muted);
+      padding: 5px; cursor: pointer; transition: color 0.2s;
+      display: flex; align-items: center; justify-content: center; margin-bottom: 2px;
+    }
+    #mic-btn.recording {
+      color: #ff3b30; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+
     #send-btn {
       background: var(--primary); color: white; border: none;
-      width: 44px; height: 44px; border-radius: 50%; display: flex;
-      align-items: center; justify-content: center; font-size: 1.2em; cursor: pointer;
+      width: 42px; height: 42px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; font-size: 1.2em; cursor: pointer; margin-bottom: 1px;
     }
 
     /* Плавающий плеер */
@@ -162,6 +179,7 @@
     </div>
     <div class="chat-input-wrapper">
       <textarea id="user-input" rows="1" placeholder="Ваш вопрос..."></textarea>
+      <button id="mic-btn" title="Голосовой ввод">🎙️</button>
       <button id="send-btn">➤</button>
     </div>
   </main>
@@ -200,7 +218,9 @@
         <select id="reader-voice">
           <option value="filipp">Филипп (Мужской)</option>
           <option value="madirus">Мадирус (Мужской)</option>
+          <option value="zahar">Захар (Мужской)</option>
           <option value="alena">Алена (Женский)</option>
+          <option value="jane">Джейн (Женский)</option>
         </select>
       </div>
 
@@ -224,13 +244,19 @@
   <script>
     // --- UI Логика ---
     function switchTab(tabName) {
-      // Скрываем все вкладки и снимаем выделение со всех кнопок
       document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
       
-      // Включаем нужную вкладку и подсвечиваем нужную кнопку по её ID
       document.getElementById(`tab-${tabName}`).classList.add('active');
       document.getElementById(`nav-${tabName}`).classList.add('active');
+
+      // Скрываем плеер в чате, чтобы не мешал вводу
+      const player = document.querySelector('.floating-player');
+      if (tabName === 'chat') {
+        player.style.display = 'none';
+      } else {
+        player.style.display = 'flex';
+      }
     }
 
     function toggleModal(show) {
@@ -265,8 +291,8 @@
     const pauseBtn = document.getElementById('pause-btn');
     
     async function synthesizeYandex(text, voice) {
-      // ВНИМАНИЕ: Адрес локального сервера. Для GitHub Pages нужно менять!
-      const response = await fetch("http://127.0.0.1:5000/synthesize", {
+      // ТВОЙ СЕРВЕР VERCEL
+      const response = await fetch("https://smart-reader-api.vercel.app/synthesize", {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: text, voice: voice })
@@ -287,7 +313,7 @@
         wordSpans = document.querySelectorAll('.word');
         currentWordIndex = 0;
         playBtn.disabled = false;
-        switchTab('reader'); // Переключаем на чтение при загрузке
+        switchTab('reader'); 
       };
       reader.readAsText(file, document.getElementById('encoding-select').value);
     });
@@ -312,7 +338,6 @@
          if(wordSpans[i]) wordSpans[i].classList.add('highlight');
       }
       
-      // Плавная прокрутка с учетом плавающего плеера
       if(wordSpans[currentWordIndex]) {
         const y = wordSpans[currentWordIndex].getBoundingClientRect().top + window.scrollY - 100;
         window.scrollTo({top: y, behavior: 'smooth'});
@@ -330,7 +355,7 @@
         console.error("Ошибка аудио", e);
         isPlaying = false;
         playBtn.style.display = 'block'; pauseBtn.style.display = 'none';
-        alert("Ошибка озвучки. Проверьте запущен ли локальный сервер (127.0.0.1:5000)");
+        alert("Ошибка озвучки. Проверьте соединение с Vercel.");
       }
     }
 
@@ -347,17 +372,54 @@
       }
     });
 
-    // --- ЧАТ И УНИВЕРСАЛЬНЫЙ API ---
+    // --- ЧАТ, ГОЛОСОВОЙ ВВОД И LLM ---
     const chatHistoryUI = document.getElementById('chat-history');
     const userInput = document.getElementById('user-input');
+    const micBtn = document.getElementById('mic-btn');
     let chatContext = [];
+
+    // Инициализация микрофона (Web Speech API)
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ru-RU';
+      recognition.interimResults = false;
+
+      micBtn.addEventListener('click', () => {
+        if (isPlaying) { isPlaying = false; pauseBtn.click(); }
+        micBtn.classList.add('recording');
+        userInput.placeholder = "Слушаю вас...";
+        userInput.value = "";
+        tx.style.height = 'auto'; // Сброс высоты
+        try { recognition.start(); } catch(e) {}
+      });
+
+      recognition.onresult = (e) => {
+        userInput.value = e.results[0][0].transcript;
+        tx.style.height = 'auto';
+        tx.style.height = (tx.scrollHeight) + 'px'; // Подгоняем высоту под надиктованный текст
+      };
+
+      recognition.onspeechend = () => {
+        recognition.stop();
+        micBtn.classList.remove('recording');
+        userInput.placeholder = "Ваш вопрос...";
+      };
+
+      recognition.onerror = (e) => {
+        console.error("Ошибка микрофона:", e);
+        micBtn.classList.remove('recording');
+        userInput.placeholder = "Ваш вопрос...";
+      };
+    } else {
+      micBtn.style.display = 'none'; // Скрываем кнопку, если браузер не поддерживает
+    }
 
     function addMessageUI(text, isUser) {
       const div = document.createElement('div');
       div.className = `msg ${isUser ? 'msg-user' : 'msg-ai'}`;
       div.textContent = text;
       chatHistoryUI.appendChild(div);
-      // Скролл в самый низ чата
       const chatTab = document.getElementById('tab-chat');
       chatTab.scrollTop = chatTab.scrollHeight;
     }
@@ -402,7 +464,7 @@
       if(isPlaying) pauseBtn.click();
 
       userInput.value = "";
-      userInput.style.height = 'auto'; // Сброс высоты
+      userInput.style.height = 'auto'; 
       addMessageUI(q, true);
 
       const start = Math.max(0, currentWordIndex - 200);
